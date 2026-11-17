@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+dist/
+build/
+report.json
+report.md
+.coverage
+
+# Per-store scan inputs, raw results, and hand checks stay private.
+data/scan/

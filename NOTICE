@@ -1,0 +1,19 @@
+lanecheck
+Copyright 2026 lanecheck contributors
+
+This product includes schema files from the Universal Commerce Protocol
+project, tag v2026-08-25, commit 87dd4b1fcff9105d68173120897237fa784c74ef,
+under the Apache License, Version 2.0.
+Source: https://github.com/Universal-Commerce-Protocol/ucp
+The published copies on ucp.dev rewrite $id values under /2026-08-25/.
+The files in third_party/ucp/2026-08-25/schemas are the tag's source/schemas
+tree and keep the $id values from that commit.
+
+This product includes schema.agentic_checkout.json from the Agentic Commerce
+Protocol release 2026-04-17, commit 9abf303f48088d170503a54502d612b8b1997897,
+under the Apache License, Version 2.0.
+Source: https://github.com/agentic-commerce-protocol/agentic-commerce-protocol
+
+The ucp-schema validator is a separate program (Apache-2.0) and is not
+vendored. Install it with: cargo install ucp-schema --version 1.4.1 --locked
+https://github.com/Universal-Commerce-Protocol/ucp-schema

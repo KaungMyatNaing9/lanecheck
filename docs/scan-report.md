@@ -1,0 +1,91 @@
+# Read-only scan of 100 non-Shopify stores
+
+The same 100 origins were scanned twice with `lanecheck scan --readonly`. Both runs were GET-only, used `lanecheck-scan/0.1`, waited at least 2 seconds between requests to a host, obeyed `robots.txt` for that user-agent, and stopped on a block or challenge. Per-store rows are not in this repository. The tables below are the aggregates. The first run did not follow same-registrable-domain redirects. The second run, after the fixes below, did.
+
+Fixes in the second run:
+
+- Follow same-registrable-domain redirects, up to 4 hops, for `robots.txt`, `/.well-known/ucp`, `/.well-known/acp.json`, the homepage, sitemaps, and product pages. A redirect that ends in HTTP 400 or 404 is missing.
+- A homepage redirect to another host is followed only when the host is the same registrable domain (for example `www` or `https`). Otherwise the result is `redirects_off_site`.
+- Product URLs come from sitemap product entries, links with product markup, JSON-LD product or item-list URLs, and paths such as `/product-page/`, `/produto/`, `/produit/`, and `/sklep/<slug>/`. At most three product pages are fetched.
+- GTIN, price, availability, shipping, and returns are scored only on those product pages, not on the homepage or a listing.
+- Price is also read from `offers.priceSpecification`. Nested `offers` lists such as `[[{Offer}]]` are unwrapped.
+- Microdata `Product` is recorded as a separate signal from JSON-LD.
+
+## Fixable gap
+
+A fixable gap is counted only when the homepage was readable (`ok`). It is one or more of:
+
+- `missing_ucp` or `invalid_ucp`: after redirects, `/.well-known/ucp` was 400 or 404, or HTTP 200 that `ucp-schema` 1.4.1 rejected
+- `missing_acp` or `invalid_acp`: the same rule for `/.well-known/acp.json` and the 2026-04-17 `DiscoveryResponse` schema
+- `robots_blocks_shopping_agent`: the parsed robots.txt disallows `Storebot-Google`, `OAI-SearchBot`, `Claude-SearchBot`, `Claude-User`, or `PerplexityBot` on `/`
+- `no_product_structured_data`: the sampled product pages had no schema.org Product in JSON-LD or microdata
+- `missing_gtin`, `missing_price`, `missing_availability`, `missing_shipping`, or `missing_returns`: at least one product page had a Product, and that field was absent or invalid on every sampled product page
+
+Blocked, unreachable, and off-site-redirect hosts are not counted as having a gap.
+
+## Old vs new
+
+| | First run | Second run |
+| --- | ---: | ---: |
+| Stores | 100 | 100 |
+| Homepage readable | 78 | 76 |
+| Blocked or challenged | 10 | 11 |
+| Unreachable | 12 | 8 |
+| Homepage redirects off-site | 0 | 5 |
+| Readable stores with at least one fixable gap | 78 | 76 |
+| Readable stores with no fixable gap | 0 | 0 |
+| GET requests recorded | 463 | 887 |
+
+Every readable store still has at least one fixable gap. The two fewer readable stores are not "fixed"; they landed in blocked, unreachable, or off-site instead of `ok`.
+
+### Reachability detail, second run
+
+Blocked (11): robots.txt HTTP 403 on 5, a challenge on the UCP URL on 4, a challenge on the homepage on 1, and a robots.txt HTTP 200 that matched the challenge check on 1.
+
+Unreachable (8): homepage HTTP 404 on 2, TLS failure on 3, DNS failure on 1, TLS handshake timeout on 1, and one read timeout recorded as a scanner error.
+
+Off-site (5): the homepage redirected to a different registrable domain. Those URLs were not fetched.
+
+### Discovery and product fields, readable stores only
+
+| Finding | First run (78 readable) | Second run (76 readable) |
+| --- | ---: | ---: |
+| UCP HTTP 200 and schema-valid | 32 | 31 |
+| UCP missing (404, or 400 after a redirect) | 34 | 41 |
+| UCP HTTP 200 but schema-invalid | 0 | 4 |
+| UCP left as an unfollowed redirect | 12 | 0 |
+| ACP missing (404 or 400 after a redirect) | 36 | 72 |
+| ACP HTTP 200 but schema-invalid | 0 | 4 |
+| ACP HTTP 200 and schema-valid | 0 | 0 |
+| ACP left as an unfollowed redirect | 42 | 0 |
+| Stores where a product page was fetched | 24 | 49 |
+| Product pages with a Product (JSON-LD or microdata) | 15 | 25 |
+| No Product on the sampled product pages | 63 | 51 |
+| Of stores with a Product: missing valid GTIN | 12 | 23 |
+| Of stores with a Product: missing price | 4 | 2 |
+| Of stores with a Product: missing availability | 0 | 0 |
+| Of stores with a Product: missing shipping | 14 | 22 |
+| Of stores with a Product: missing returns | 14 | 22 |
+| robots.txt disallows a shopping/search token on `/` | 0 | 0 |
+
+Of the 25 stores with a Product on a fetched product page, 23 were JSON-LD only, 1 was microdata only, and 1 had both. 23 of those 25 had a price. 2 had a valid GTIN. 3 had shipping data. 3 had returns data.
+
+The second run's 72 missing ACP documents are 43 final HTTP 404s and 29 final HTTP 400s. The first run had counted most of those as unfollowed redirects.
+
+## Wix publishes UCP
+
+An independent hand check of the first run's 32 readable valid UCP profiles found they were real: 30 were generated by Wix and 2 by BigCommerce. The second run still shows the same shape. Of its 31 readable valid profiles, 29 are on hosts whose homepage matched Wix and 2 matched BigCommerce. In this set, a valid UCP profile is a platform default for Wix, not evidence that the merchant wrote one.
+
+## What did not change
+
+No parsed robots.txt disallowed `Storebot-Google`, `OAI-SearchBot`, `Claude-SearchBot`, `Claude-User`, or `PerplexityBot` on `/`. A few files disallow only a training token (`GPTBot`, `ClaudeBot`, or `Google-Extended`): 4 readable stores in the first run and 3 in the second.
+
+No ACP discovery document validated. No request was a POST, and none targeted a cart or checkout URL.
+
+## Limits
+
+- At most three product pages are fetched, and only URLs the homepage or a product sitemap exposed. 27 of the 76 readable stores still yielded no product URL, and 51 had no Product on the pages that were fetched.
+- JSON-LD and microdata that appear only after JavaScript runs are invisible.
+- A redirect off the registrable domain is not followed. A redirect to `/cart`, `/checkout`, or a login path is not followed.
+- Challenge detection is status codes plus a short phrase list. One read timed out and is counted as unreachable rather than as a second attempt.
+- Directory platform labels can disagree with the homepage. Shopify markers are not in this 100; 10 other candidates were dropped for that reason before the first run.
